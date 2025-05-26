@@ -72,6 +72,7 @@
     FunctionsToExport = @(
         'Update-WinUpdCabFile',
         'Remove-WinUpdOfflineScan',
+        'Get-WinUpdScanServices',
         'New-WinUpdOfflineScan',
         'Get-WinUpdUpdates',
         'Install-WinUpdUpdates',

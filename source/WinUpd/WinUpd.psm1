@@ -16,21 +16,28 @@ Function Update-WinUpdCabFile
 
         [Parameter(Mandatory=$false)]
         [ValidateNotNullOrEmpty()]
-        [string]$Uri = "https://catalog.s.download.windowsupdate.com/microsoftupdate/v6/wsusscan/wsusscn2.cab"
+        [string]$Uri = "https://catalog.s.download.windowsupdate.com/microsoftupdate/v6/wsusscan/wsusscn2.cab",
+
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNull()]
+        [switch]$Force = $false
     )
 
     process
     {
-        # Determine modification time for the local cab file
+        # Modification times for comparison
         $cabModificationTime = $null
+        $urlModificationTime = $null
+
+        # Determine modification time for the local cab file
         try {
             Write-Verbose "Getting current cab file modification time"
             $cabModificationTime = (Get-Item $Path).LastWriteTimeUtc
+
+            Write-Verbose "Cab Modification Time: $cabModificationTime"
         } catch {
             Write-Verbose "Could not get current cab file modification time: $_"
         }
-
-        Write-Verbose "Cab Modification Time: $cabModificationTime"
 
         # Determine modification time for the remote cab file
         Write-Verbose "Retrieving URL modification time"
@@ -43,38 +50,44 @@ Function Update-WinUpdCabFile
         $headers = Invoke-WebRequest @params
 
         # Extract modification time
-        $urlModificationTime = $null
         try {
             $urlModificationTime = [DateTime]::Parse($headers.Headers["Last-Modified"])
+
+            Write-Verbose "Url Modification Time: $urlModificationTime"
         } catch {
             Write-Warning "Failed to parse Last-Modified header as DateTime: $_"
         }
 
-        Write-Verbose "Url Modification Time: $urlModificationTime"
-
-        # Download the file, if it's newer than what we have locally or we don't have valid modification
-        # time information
-        if ($null -eq $cabModificationTime -or $null -eq $urlModificationTime -or $urlModificationTime -gt $cabModificationTime)
+        # If we have cab and url modification times and the local file is newer than the url, then finish here
+        if (!$Force -and $null -ne $cabModificationTime -and $null -ne $urlModificationTime -and $cabModificationTime -gt $urlModificationTime)
         {
-            Write-Verbose "wsusscn2.cab file needs updating. Downloading."
-            $params = @{
-                UseBasicParsing = $true
-                Method = "Get"
-                Uri = $Uri
-                OutFile = ("{0}.tmp" -f $Path)
-            }
-
-            # Download to temporary location
-            Remove-Item -Force ("{0}.tmp" -f $Path) -EA Ignore
-            Invoke-WebRequest @params
-
-            # Move the temporary location to the actual place for the scn2 cab file
-            Move-Item ("{0}.tmp" -f $Path) $Path -Force
-
-            Write-Verbose "Successfully downloaded wsusscn2.cab"
-        } else {
             Write-Verbose "Local file is newer than the Uri. Not downloading."
+            return
         }
+
+        Write-Verbose "wsusscn2.cab file needs updating. Downloading."
+
+        # Temporary path for download file
+        $tempPath = $Path + ".tmp"
+        if (Test-Path $tempPath)
+        {
+            Remove-Item -Force $tempPath
+        }
+
+        # Download to temporary location
+        $params = @{
+            UseBasicParsing = $true
+            Method = "Get"
+            Uri = $Uri
+            OutFile = $tempPath
+        }
+
+        Invoke-WebRequest @params
+
+        # Move the temporary location to the actual place for the scn2 cab file
+        Move-Item $tempPath $Path -Force
+
+        Write-Verbose "Successfully updated wsusscn2.cab"
     }
 }
 
@@ -104,6 +117,21 @@ Function Remove-WinUpdOfflineScan
     }
 }
 
+Function Get-WinUpdScanServices
+{
+    [CmdletBinding()]
+    param()
+
+    Process
+    {
+        # Create the ServiceManager object
+        Write-Verbose "Creating ServiceManager object"
+        $manager = New-Object -ComObject Microsoft.Update.ServiceManager
+
+        $manager.Services
+    }
+}
+
 Function New-WinUpdOfflineScan
 {
     param(
@@ -126,12 +154,9 @@ Function New-WinUpdOfflineScan
         Write-Verbose "Removing any preexisting service registrations for `"$OfflineServiceName`""
         Remove-WinUpdOfflineScan -Name $OfflineServiceName
 
-        # Create the ServiceManager object
-        Write-Verbose "Creating ServiceManager object"
-        $manager = New-Object -ComObject Microsoft.Update.ServiceManager
-
-        # Update the searcher to use the cab file
+        # Add the offline scan file to Windows Update
         Write-Verbose "Updating searcher to use the local cab file"
+        $manager = New-Object -ComObject Microsoft.Update.ServiceManager
         $service = $manager.AddScanPackageService($OfflineServiceName, $CabFile, 1)
 
         # Return the service ID
