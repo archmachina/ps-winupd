@@ -73,7 +73,7 @@
         'Update-WinUpdCabFile',
         'Remove-WinUpdOfflineScan',
         'Get-WinUpdScanServices',
-        'New-WinUpdOfflineScan',
+        'Update-WinUpdOfflineScan',
         'Get-WinUpdUpdates',
         'Install-WinUpdUpdates',
         'Get-WinUpdRebootRequired'

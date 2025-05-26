@@ -117,6 +117,92 @@ Function Remove-WinUpdOfflineScan
     }
 }
 
+Function Update-WinUpdOfflineScan
+{
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OfflineServiceName = "Offline Sync Service",
+
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$CabFile = $null,
+
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNull()]
+        [switch]$Force = $false
+    )
+
+    process
+    {
+        # Create the service manager to interact with Windows Update
+        $manager = New-Object -ComObject Microsoft.Update.ServiceManager
+
+        # Collect all package services matching the name
+        [array]$services = @($manager.Services | ForEach-Object { $_ })
+        $services = $services |
+            Where-Object { $_.Name -eq $OfflineServiceName } |
+            Sort-Object -Property IssueDate -Descending
+        Write-Verbose "Current package services:"
+        Write-Verbose ($services | Format-Table -Property Name,ServiceId,IssueDate | Out-String)
+
+        # Remove all but the newest
+        $services | Select-Object -Skip 1 | ForEach-Object {
+            $service = $_
+
+            Write-Verbose ("Removing service with ID: " + $service.ServiceID)
+            $manager.RemoveService($service.ServiceID)
+        }
+
+        # Get details for the active service, if there is one
+        $currentIssueDate = $null
+        $currentServiceId = $null
+        if (($services | Measure-Object).Count -gt 0)
+        {
+            #$currentIssueDate = [DateTime]::SpecifyKind($services[0].IssueDate, [DateTimeKind]::Utc)
+            $currentIssueDate = $services[0].IssueDate
+            $currentServiceId = $services[0].ServiceID
+
+            Write-Verbose ("Current service issue date: " + $currentIssueDate.ToString("o"))
+            Write-Verbose ("Current service ID: " + $currentServiceId)
+        }
+
+        # Get the full path to the cab file
+        $CabFile = (Get-Item $CabFile).FullName
+        Write-Verbose "Cab File path: $CabFile"
+
+        # Get the cab file modification time
+        # Note - IssueDate is in UTC
+        $cabModificationTime = (Get-Item $CabFile).LastWriteTimeUtc
+        Write-Verbose ("Cab modification time: " + $cabModificationTime.ToString("o"))
+
+        # Add the offline scan file to Windows Update
+        if ($Force -or $null -eq $currentIssueDate -or $cabModificationTime -gt $currentIssueDate)
+        {
+            Write-Verbose "Updating searcher to use the local cab file"
+
+            # Add the cab file to Windows Update
+            $service = $manager.AddScanPackageService($OfflineServiceName, $CabFile, 1)
+
+            if ($null -ne $currentServiceId)
+            {
+                # Remove the now defunct service
+                Write-Verbose "Removing defunct service: $currentServiceId"
+                $manager.RemoveService($currentServiceId)
+            }
+
+            # Return the new service ID
+            Write-Verbose ("New service ID: {0}" -f $service.ServiceId)
+            $service.ServiceId
+        } else {
+            Write-Verbose "Service does not need updating. Returning current service: $currentServiceId"
+
+            # Return the current service ID
+            $currentServiceId
+        }
+    }
+}
+
 Function Get-WinUpdScanServices
 {
     [CmdletBinding()]
@@ -129,38 +215,6 @@ Function Get-WinUpdScanServices
         $manager = New-Object -ComObject Microsoft.Update.ServiceManager
 
         $manager.Services
-    }
-}
-
-Function New-WinUpdOfflineScan
-{
-    param(
-        [Parameter(Mandatory=$false)]
-        [ValidateNotNullOrEmpty()]
-        [string]$OfflineServiceName = "Offline Sync Service",
-
-        [Parameter(Mandatory=$false)]
-        [ValidateNotNullOrEmpty()]
-        [string]$CabFile = $null
-    )
-
-    process
-    {
-        # Get the full path to the cab file
-        $CabFile = (Get-Item $CabFile).FullName
-        Write-Verbose "Cab File path: $CabFile"
-
-        # Remove any existing instances of the package service with this name
-        Write-Verbose "Removing any preexisting service registrations for `"$OfflineServiceName`""
-        Remove-WinUpdOfflineScan -Name $OfflineServiceName
-
-        # Add the offline scan file to Windows Update
-        Write-Verbose "Updating searcher to use the local cab file"
-        $manager = New-Object -ComObject Microsoft.Update.ServiceManager
-        $service = $manager.AddScanPackageService($OfflineServiceName, $CabFile, 1)
-
-        # Return the service ID
-        $service.ServiceId
     }
 }
 
