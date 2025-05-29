@@ -253,12 +253,15 @@ Function Get-WinUpdUpdates
         Write-Verbose "Found $count updates not installed"
 
         # Report on any updates found
-        # Use an Arraylist to handle odd behaviour when converting an empty 'UpdateCollection'
-        # to JSON. An empty UpdateCollection appears as an empty dictionary.
-        $updates = [System.Collections.ArrayList]::New()
-        $result.Updates | ForEach-Object { $updates.Add($_) | Out-Null }
-
-        $updates
+        # This is just to help in conversion of the result to json. PS5 converts an empty
+        # array or no response to a PSCustomObject, which converts to a dictionary in json.
+        # Returning $null is easier to work with.
+        if (($result.Updates | Measure-Object).Count -gt 0)
+        {
+            @($result.Updates)
+        } else {
+            $null
+        }
     }
 }
 
