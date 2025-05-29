@@ -253,15 +253,7 @@ Function Get-WinUpdUpdates
         Write-Verbose "Found $count updates not installed"
 
         # Report on any updates found
-        # This is just to help in conversion of the result to json. PS5 converts an empty
-        # array or no response to a PSCustomObject, which converts to a dictionary in json.
-        # Returning $null is easier to work with.
-        if (($result.Updates | Measure-Object).Count -gt 0)
-        {
-            @($result.Updates)
-        } else {
-            $null
-        }
+        $result.Updates
     }
 }
 
