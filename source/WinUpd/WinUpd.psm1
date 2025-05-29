@@ -253,7 +253,7 @@ Function Get-WinUpdUpdates
         Write-Verbose "Found $count updates not installed"
 
         # Report on any updates found
-        $result.Updates
+        [System.Collections.ArrayList]$result.Updates
     }
 }
 
