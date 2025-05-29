@@ -253,7 +253,12 @@ Function Get-WinUpdUpdates
         Write-Verbose "Found $count updates not installed"
 
         # Report on any updates found
-        [System.Collections.ArrayList]$result.Updates
+        # Use an Arraylist to handle odd behaviour when converting an empty 'UpdateCollection'
+        # to JSON. An empty UpdateCollection appears as an empty dictionary.
+        $updates = [System.Collections.ArrayList]::New()
+        $result.Updates | ForEach-Object { $updates.Add($_) | Out-Null }
+
+        $updates
     }
 }
 
@@ -314,3 +319,4 @@ Function Get-WinUpdRebootRequired
         [bool]($systemInfo.RebootRequired)
     }
 }
+
