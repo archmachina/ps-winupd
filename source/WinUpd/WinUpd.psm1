@@ -284,11 +284,17 @@ Function Install-WinUpdUpdates
             return
         }
 
+        # Result to return to caller
+        $result = [PSCustomObject]@{
+            Download = $null
+            Install = $null
+        }
+
         # Download any packages
         Write-Verbose "Starting download of updates"
         $downloader = New-Object -ComObject Microsoft.Update.Downloader
         $downloader.Updates = $updateCol
-        $downloader.Download() | Out-Null
+        $result.Download = $downloader.Download()
 
         if (!$DownloadOnly)
         {
@@ -297,10 +303,12 @@ Function Install-WinUpdUpdates
             $installer = New-Object -ComObject Microsoft.Update.Installer
             $installer.ForceQuiet = $true
             $installer.Updates = $updateCol
-            $installer.Install() | Out-Null
+            $result.Install = $installer.Install()
 
             Write-Verbose "Update installation completed"
         }
+
+        $result
     }
 }
 
